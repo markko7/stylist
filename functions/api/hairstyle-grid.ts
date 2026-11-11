@@ -43,17 +43,12 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 function base64ToBlob(base64Data: string, mimeType: string): Blob {
   const byteChars = atob(base64Data);
-  const byteArrays: Uint8Array[] = [];
-  const sliceSize = 1024;
-  for (let offset = 0; offset < byteChars.length; offset += sliceSize) {
-    const slice = byteChars.slice(offset, offset + sliceSize);
-    const byteNumbers = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-      byteNumbers[i] = slice.charCodeAt(i);
-    }
-    byteArrays.push(new Uint8Array(byteNumbers));
+  const buffer = new ArrayBuffer(byteChars.length);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < byteChars.length; i++) {
+    bytes[i] = byteChars.charCodeAt(i);
   }
-  return new Blob(byteArrays, { type: mimeType });
+  return new Blob([buffer], { type: mimeType });
 }
 
 async function extractPersonDescription(
