@@ -1,36 +1,24 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ATELIER VERA — AI Personal Styling & Anthropometric Consulting
+
+A Next.js and TypeScript web application that generates a bespoke personal styling and wardrobe consultation dossier from a user's photo, height, weight, and style preferences.
+
+## Features
+
+- **Portrait Upload & Live Colorimetry Scanner**: Extracts dominant hex pigments, undertone warmth, contrast index, and luminance on a client-side `<canvas>`, plus includes 3 instant demo profiles.
+- **Height & Weight Calibration**: Synchronized sliders and numeric inputs with an **Imperial (`ft`/`in` & `lbs`)** and **Metric (`cm` & `kg`)** toggle, live BMI, and inseam calculation.
+- **Sartorial Preferences Quiz**: Tailoring block (`Womenswear`, `Menswear`, `Unisex / Editorial`), signature aesthetic, primary occasion, fit preference, and budget tier (`$`, `$$`, `$$$`).
+- **AI Vision API + Built-in Anthropometric Engine**: Connects to Google Gemini Vision (`GEMINI_API_KEY`) or OpenAI Vision (`OPENAI_API_KEY`) when configured, with an automatic fallback to the built-in Atelier Colorimetry & Anthropometric Engine.
+- **4-Tab Consultation Dossier**:
+  1. Proportions & Sizing Guide (Tops, Waist, Inseam, Outerwear, Suit/Dress, 1/3-to-2/3 ratio, and tailoring notes)
+  2. 12-Season Color Palette with interactive click-to-copy HEX swatches
+  3. Curated 3-Outfit Lookbook with piece-by-piece sizing and brand suggestions
+  4. Silhouette Rules & Interactive Capsule Shopping Checklist + Print/PDF export
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
