@@ -79,11 +79,25 @@ export interface ShoppingItem {
   estimatedPriceRange: string;
 }
 
+export interface HairstyleGridItem {
+  id: string;
+  name: string;
+  category: string;
+  lengthAndCut: string;
+  styleDescription: string;
+  whyItComplements: string;
+  recommendedToneHex: string;
+  recommendedToneName: string;
+  silhouetteVariant: number;
+}
+
 export interface ConsultationReport {
   source: "gemini-vision" | "openai-vision" | "atelier-engine";
   generatedAt: string;
   clientTitle: string;
   stylistSummary: string;
+  faceShapeSummary: string;
+  hairstyleGrid: HairstyleGridItem[];
   metricsAnalysis: {
     heightDisplay: string;
     weightDisplay: string;

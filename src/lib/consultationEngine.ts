@@ -4,6 +4,7 @@ import {
   ColorSwatch,
   AvoidColorSwatch,
   CuratedOutfit,
+  HairstyleGridItem,
   ShoppingItem,
 } from "../types/consultation";
 
@@ -540,11 +541,20 @@ export function generateAtelierConsultation(req: ConsultationRequest): Consultat
     },
   ];
 
+  const { faceShapeSummary, hairstyleGrid } = buildHairstyleGrid(
+    req,
+    bmi,
+    colorAnalysis.season,
+    colorAnalysis.undertone
+  );
+
   return {
     source: "atelier-engine",
     generatedAt: new Date().toISOString(),
     clientTitle: `${aestheticLabels[req.aesthetic]} Dossier`,
     stylistSummary: `Designed for a ${heightDisplay}, ${weightDisplay} (${frameProfile}) profile seeking ${aestheticLabels[req.aesthetic]} for ${occasionLabels[req.occasion]}. Your photo luminance and undertone profile aligns with ${colorAnalysis.season}, favoring ${p0.name} and ${n0.name} paired with ${req.fitPreference} proportions that honor the vertical Rule of Thirds.`,
+    faceShapeSummary,
+    hairstyleGrid,
     metricsAnalysis: {
       heightDisplay,
       weightDisplay,
@@ -607,6 +617,280 @@ export function generateAtelierConsultation(req: ConsultationRequest): Consultat
   };
 }
 
+function buildHairstyleGrid(
+  req: ConsultationRequest,
+  bmi: number,
+  season: string,
+  undertone: string
+): { faceShapeSummary: string; hairstyleGrid: HairstyleGridItem[] } {
+  const isWarm = req.photoMetrics.warmthScore >= 0;
+  const primaryToneHex = isWarm ? "#3B281E" : "#1F1D20";
+  const primaryToneName = isWarm ? "Warm Espresso Gloss" : "Cool Obsidian Ink";
+  const highlightToneHex = isWarm ? "#7A5236" : "#4A4240";
+  const highlightToneName = isWarm
+    ? "Spun Honey / Caramel Babylights"
+    : "Smoky Ash / Cocoa Dimension";
+  const thecopperOrMochaHex = isWarm ? "#6B3826" : "#342826";
+  const copperOrMochaName = isWarm ? "Rich Chestnut Amber" : "Cool Dark Mocha";
+
+  const frameNote =
+    bmi < 20.5
+      ? "soft horizontal texture and cheek-level volume to balance a slender vertical frame"
+      : bmi > 25.5
+      ? "crown elevation and diagonal face-framing lines that elongate the jawline and neck"
+      : "balanced crown-to-jaw symmetry that highlights natural cheekbone structure";
+
+  const faceShapeSummary = `Calibrated for your ${season} complexion (${undertone.toLowerCase()}) and ${req.heightCm} cm stature, prioritizing ${frameNote}.`;
+
+  if (req.genderFit === "menswear") {
+    return {
+      faceShapeSummary,
+      hairstyleGrid: [
+        {
+          id: "mens-1",
+          name: "Textured Executive Taper",
+          category: "01 // Signature Tailored",
+          lengthAndCut: "3\" Scissor Top · Low Taper Sides",
+          styleDescription:
+            "A classic scissor-layered top with a soft side sweep and clean, low-tapered temples that leave natural movement through the crown.",
+          whyItComplements:
+            "Adds subtle vertical height at the front hairline to elongate your facial proportions while keeping the ears and jawline sharply defined.",
+          recommendedToneHex: primaryToneHex,
+          recommendedToneName: primaryToneName,
+          silhouetteVariant: 1,
+        },
+        {
+          id: "mens-2",
+          name: "Soft Curtain Flow",
+          category: "02 // Editorial Movement",
+          lengthAndCut: "4.5\" Cheekbone Layers · Off-Center Part",
+          styleDescription:
+            "Medium-length flowing layers parted slightly off-center, feathering backward around the temples with a weightless matte finish.",
+          whyItComplements:
+            "Frames the upper cheekbones and softens forehead width, harmonizing effortlessly with relaxed lapels and open collars.",
+          recommendedToneHex: highlightToneHex,
+          recommendedToneName: highlightToneName,
+          silhouetteVariant: 2,
+        },
+        {
+          id: "mens-3",
+          name: "Architectural French Crop",
+          category: "03 // Modern Minimalist",
+          lengthAndCut: "1.5\" Choppy Crown · Mid Drop Fade",
+          styleDescription:
+            "Point-cut textured crown styled forward into a micro-fringe, paired with a contoured drop fade that follows the occipital bone.",
+          whyItComplements:
+            "Draws immediate focus to the eyes and brow bone while creating a crisp, high-contrast jawline silhouette.",
+          recommendedToneHex: primaryToneHex,
+          recommendedToneName: primaryToneName,
+          silhouetteVariant: 3,
+        },
+        {
+          id: "mens-4",
+          name: "Brushed-Back Riviera Wave",
+          category: "04 // Quiet Luxury",
+          lengthAndCut: "4\" Layered Top · Scissor-Tapered Nape",
+          styleDescription:
+            "Air-dried, swept-back layers with graduated length at the nape and temples for an effortless continental silhouette.",
+          whyItComplements:
+            "Balances neck-to-shoulder proportions and prevents the harshness of ultra-short clipper fades against your skin undertone.",
+          recommendedToneHex: highlightToneHex,
+          recommendedToneName: highlightToneName,
+          silhouetteVariant: 4,
+        },
+        {
+          id: "mens-5",
+          name: "Sculpted Quiff & Classic Taper",
+          category: "05 // Vertical Elongation",
+          lengthAndCut: "3.5\" Volumized Forelock · Tapered Sides",
+          styleDescription:
+            "Elevated volume at the forelock that graduates smoothly toward the crown, supported by structured scissor-over-comb sides.",
+          whyItComplements:
+            "Adds 1.5 inches of visual stature and creates an ideal 1/3 facial vertical ratio that flatters structured outerwear.",
+          recommendedToneHex: primaryToneHex,
+          recommendedToneName: primaryToneName,
+          silhouetteVariant: 5,
+        },
+        {
+          id: "mens-6",
+          name: "Mod Shag & Tapered Mullet",
+          category: "06 // Vanguard Texture",
+          lengthAndCut: "Razored Layers · Clean Temple Taper",
+          styleDescription:
+            "Razored internal texture across the crown and back with airy fringe pieces and a neat temple taper around the ears.",
+          whyItComplements:
+            "Introduces dynamic profile depth and frames the neck, ideal for high-contrast street-editorial or monochrome styling.",
+          recommendedToneHex: thecopperOrMochaHex,
+          recommendedToneName: copperOrMochaName,
+          silhouetteVariant: 6,
+        },
+        {
+          id: "mens-7",
+          name: "Sleek Side-Part Ivy League",
+          category: "07 // Formal Precision",
+          lengthAndCut: "2\" Graduated Top · #2.5 Guard Taper",
+          styleDescription:
+            "A refined, short-proportioned Ivy League cut with a defined side part and a natural satin finish.",
+          whyItComplements:
+            "Highlights facial symmetry and keeps the silhouette ultra-clean for executive suiting and formal eveningwear.",
+          recommendedToneHex: primaryToneHex,
+          recommendedToneName: primaryToneName,
+          silhouetteVariant: 7,
+        },
+        {
+          id: "mens-8",
+          name: "Wavy Collarbone Bro-Flow",
+          category: "08 // Relaxed Coastal",
+          lengthAndCut: "5.5\" Long Layers · Tuck-Behind-Ear Length",
+          styleDescription:
+            "Long, movement-rich layers designed to tuck cleanly behind the ears with sun-kissed dimensional ends.",
+          whyItComplements:
+            "Softens angular jawlines and adds organic warmth that pairs naturally with knitwear and linen shirting.",
+          recommendedToneHex: highlightToneHex,
+          recommendedToneName: highlightToneName,
+          silhouetteVariant: 8,
+        },
+        {
+          id: "mens-9",
+          name: "Close-Cropped Buzz & Shadow Taper",
+          category: "09 // Pure Bone Structure",
+          lengthAndCut: "#3 Guard Top · Skin-to-Shadow Taper",
+          styleDescription:
+            "Uniform close-cropped top blended seamlessly into a temple shadow fade, paired with crisp facial hair detailing.",
+          whyItComplements:
+            "Showcases natural cranial geometry, cheekbones, and brow structure with zero visual clutter.",
+          recommendedToneHex: primaryToneHex,
+          recommendedToneName: primaryToneName,
+          silhouetteVariant: 9,
+        },
+      ],
+    };
+  }
+
+  return {
+    faceShapeSummary,
+    hairstyleGrid: [
+      {
+        id: "style-1",
+        name: "Clavicle-Grazing Italian Lob",
+        category: "01 // Signature Quiet Luxury",
+        lengthAndCut: "Collarbone Length · Blunt-Internal Layers",
+        styleDescription:
+          "A glossy, full-perimeter collarbone bob with invisible internal weight removal and a soft off-center part.",
+        whyItComplements:
+          "Hits precisely at the clavicle to elongate the neck and bridge the transition between your jawline and tailored necklines.",
+        recommendedToneHex: primaryToneHex,
+        recommendedToneName: primaryToneName,
+        silhouetteVariant: 1,
+      },
+      {
+        id: "style-2",
+        name: "90s Supermodel Voluminous Blowout",
+        category: "02 // Glamour & Lift",
+        lengthAndCut: "Chest Length · Cascading Face-Framing Layers",
+        styleDescription:
+          "Bouncy, long layers starting at the chin with root lift at the crown and sweeping, outward-feathered ends.",
+        whyItComplements:
+          "Creates diagonal movement that lifts the cheekbones and balances your overall vertical stature.",
+        recommendedToneHex: highlightToneHex,
+        recommendedToneName: highlightToneName,
+        silhouetteVariant: 2,
+      },
+      {
+        id: "style-3",
+        name: "Parisian Chin-Length French Bob",
+        category: "03 // Chic Architectural",
+        lengthAndCut: "Jawline Grazing · Eye-Skimming Birkin Bangs",
+        styleDescription:
+          "A slightly tousled, chin-skimming bob paired with airy, brow-grazing fringe that parts effortlessly in the center.",
+        whyItComplements:
+          "Frames the eyes as the focal point of your portrait while showcasing collarbones and structured blazer lapels.",
+        recommendedToneHex: primaryToneHex,
+        recommendedToneName: primaryToneName,
+        silhouetteVariant: 3,
+      },
+      {
+        id: "style-4",
+        name: "Butterfly Layers with Curtain Fringe",
+        category: "04 // Soft Facial Framing",
+        lengthAndCut: "Mid-Back Length · Cheekbone Curtain Bangs",
+        styleDescription:
+          "Dual-tier feathery layers where shorter top tiers mimic the lift of a bob while preserving luxurious lower length.",
+        whyItComplements:
+          "Softens forehead and jawline angles while maintaining movement that flatters both V-necks and boatneck silhouettes.",
+        recommendedToneHex: thecopperOrMochaHex,
+        recommendedToneName: copperOrMochaName,
+        silhouetteVariant: 4,
+      },
+      {
+        id: "style-5",
+        name: "Sleek Sculpted Low Chignon",
+        category: "05 // Executive & Evening",
+        lengthAndCut: "Center or Deep Side Part · Nape Twist",
+        styleDescription:
+          "Glass-finish pulled-back silhouette anchored at the nape of the neck with optional face-framing tendrils.",
+        whyItComplements:
+          "Maximizes neck elongation and highlights your natural bone structure, earrings, and high-neck or lapel tailoring.",
+        recommendedToneHex: primaryToneHex,
+        recommendedToneName: primaryToneName,
+        silhouetteVariant: 5,
+      },
+      {
+        id: "style-6",
+        name: "Textured Bixie (Bob-Pixie Hybrid)",
+        category: "06 // Editorial Crop",
+        lengthAndCut: "Cropped Nape · Wispy Cheekbone Layers",
+        styleDescription:
+          "A feathery fusion of a pixie's crown volume and a micro-bob's soft perimeter around the temples and ears.",
+        whyItComplements:
+          "Lifts the visual center of gravity upward, adding instant poise and elongating your vertical body line.",
+        recommendedToneHex: highlightToneHex,
+        recommendedToneName: highlightToneName,
+        silhouetteVariant: 6,
+      },
+      {
+        id: "style-7",
+        name: "Soft S-Wave Midi Shag",
+        category: "07 // Effortless Texture",
+        lengthAndCut: "Shoulder Length · Razored Crown Layers",
+        styleDescription:
+          "Lived-in S-waves with crown texture and piecey, cheekbone-skimming fringe that enhances natural wave patterns.",
+        whyItComplements:
+          "Adds organic width around the mid-face and harmonizes beautifully with your photo's natural contrast level.",
+        recommendedToneHex: thecopperOrMochaHex,
+        recommendedToneName: copperOrMochaName,
+        silhouetteVariant: 7,
+      },
+      {
+        id: "style-8",
+        name: "Side-Swept Hollywood Midi Cut",
+        category: "08 // Asymmetrical Balance",
+        lengthAndCut: "Past-Shoulder · Deep Side Part Sweep",
+        styleDescription:
+          "Polished medium-long cut with a deep side part that creates a sweeping crest across the forehead.",
+        whyItComplements:
+          "Asymmetry breaks up facial verticality and introduces timeless warmth that complements your seasonal palette.",
+        recommendedToneHex: highlightToneHex,
+        recommendedToneName: highlightToneName,
+        silhouetteVariant: 8,
+      },
+      {
+        id: "style-9",
+        name: "Airy Crown-Lift Half-Up Bardot",
+        category: "09 // Versatile Day-to-Night",
+        lengthAndCut: "Long Layers ·Pinned Crown Volume",
+        styleDescription:
+          "Cascading lower lengths paired with a softly pinched half-up crown and parted curtain pieces around the temples.",
+        whyItComplements:
+          "Opens up the face to catch natural light while adding subtle crown height that flatters your stature.",
+        recommendedToneHex: primaryToneHex,
+        recommendedToneName: primaryToneName,
+        silhouetteVariant: 9,
+      },
+    ],
+  };
+}
+
 export interface AIEnvConfig {
   openAiApiKey?: string;
   openAiModel?: string;
@@ -644,6 +928,54 @@ function mergeReportWithOverrides(
       ? (parsedMetrics.tailoringNotes as string[])
       : baseReport.metricsAnalysis.tailoringNotes;
 
+  const mergedHairstyleGrid: HairstyleGridItem[] = baseReport.hairstyleGrid.map(
+    (baseItem, idx) => {
+      const rawList = Array.isArray(parsed.hairstyleGrid)
+        ? (parsed.hairstyleGrid as Array<Record<string, unknown>>)
+        : [];
+      const override = rawList[idx];
+      if (!override || typeof override !== "object") {
+        return baseItem;
+      }
+      return {
+        ...baseItem,
+        name:
+          typeof override.name === "string" && override.name.trim()
+            ? override.name
+            : baseItem.name,
+        category:
+          typeof override.category === "string" && override.category.trim()
+            ? override.category
+            : baseItem.category,
+        lengthAndCut:
+          typeof override.lengthAndCut === "string" &&
+          override.lengthAndCut.trim()
+            ? override.lengthAndCut
+            : baseItem.lengthAndCut,
+        styleDescription:
+          typeof override.styleDescription === "string" &&
+          override.styleDescription.trim()
+            ? override.styleDescription
+            : baseItem.styleDescription,
+        whyItComplements:
+          typeof override.whyItComplements === "string" &&
+          override.whyItComplements.trim()
+            ? override.whyItComplements
+            : baseItem.whyItComplements,
+        recommendedToneHex:
+          typeof override.recommendedToneHex === "string" &&
+          /^#[0-9A-Fa-f]{6}$/.test(override.recommendedToneHex.trim())
+            ? override.recommendedToneHex.trim()
+            : baseItem.recommendedToneHex,
+        recommendedToneName:
+          typeof override.recommendedToneName === "string" &&
+          override.recommendedToneName.trim()
+            ? override.recommendedToneName
+            : baseItem.recommendedToneName,
+      };
+    }
+  );
+
   return {
     ...baseReport,
     source,
@@ -655,6 +987,12 @@ function mergeReportWithOverrides(
       typeof parsed.stylistSummary === "string" && parsed.stylistSummary.trim()
         ? parsed.stylistSummary
         : baseReport.stylistSummary,
+    faceShapeSummary:
+      typeof parsed.faceShapeSummary === "string" &&
+      parsed.faceShapeSummary.trim()
+        ? parsed.faceShapeSummary
+        : baseReport.faceShapeSummary,
+    hairstyleGrid: mergedHairstyleGrid,
     metricsAnalysis: {
       ...baseReport.metricsAnalysis,
       frameProfile:
@@ -817,10 +1155,20 @@ A client has submitted their photo and body metrics:
 - Client Notes: ${req.customNotes || "None"}
 - Extracted Photo Pigments: ${req.photoMetrics.dominantColors.join(", ")} (Warmth: ${req.photoMetrics.warmthScore}, Contrast: ${req.photoMetrics.contrastScore}/100, Luminance: ${req.photoMetrics.brightnessScore}/100)
 
-Analyze the client's photo, complexion, proportions, and style preferences. Return ONLY valid JSON with bespoke styling recommendations matching this exact structure:
+Analyze the client's photo, facial geometry, complexion, proportions, and style preferences. Return ONLY valid JSON with bespoke styling recommendations and a 3x3 grid of 9 different hairstyles that best suit the person in the attached photo, matching this exact structure:
 {
   "clientTitle": "Editorial title for this client's style dossier",
   "stylistSummary": "2-3 sentence bespoke assessment of their visual proportions, complexion harmony, and sartorial direction",
+  "faceShapeSummary": "1-2 sentence analysis of their face shape, jawline/cheekbone balance, and cranial proportions from the photo",
+  "hairstyleGrid": [
+    {
+      "name": "Hairstyle name (provide exactly 9 distinct hairstyles for a 3x3 grid)",
+      "category": "01 // Style Category",
+      "lengthAndCut": "Concise cut & length spec",
+      "styleDescription": "Brief description of the hairstyle, its structure, texture, and finish",
+      "whyItComplements": "Why this hairstyle complements the person's facial features, bone structure, and appearance"
+    }
+  ],
   "metricsAnalysis": {
     "frameProfile": "Concise architectural frame classification",
     "verticalRuleOfThirds": "1-2 sentence rule-of-thirds proportion advice for their exact height and weight",
