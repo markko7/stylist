@@ -20,7 +20,7 @@ export default function ConsultationReportView({
 }: ConsultationReportViewProps) {
   const [activeTab, setActiveTab] = useState<
     "proportions" | "colors" | "hairstyles" | "lookbook" | "shopping"
-  >("proportions");
+  >("hairstyles");
   const [copiedHex, setCopiedHex] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>({});
   const [selectedHairstyleId, setSelectedHairstyleId] = useState<string | null>(
@@ -173,194 +173,197 @@ export default function ConsultationReportView({
     }
   };
 
+  const buildCanvas3x3DataUrl = useCallback(async (): Promise<string | null> => {
+    if (!report.hairstyleGrid?.length) return null;
+    const canvas = document.createElement("canvas");
+    const width = 1560;
+    const height = 1920;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // Background
+    ctx.fillStyle = "#F9F6F0";
+    ctx.fillRect(0, 0, width, height);
+
+    // Header Bar
+    ctx.fillStyle = "#181615";
+    ctx.fillRect(0, 0, width, 150);
+    ctx.fillStyle = "#C89D66";
+    ctx.font = "600 16px monospace";
+    ctx.fillText("ATELIER VERA // BESPOKE 3×3 HAIRSTYLE MATRIX", 48, 52);
+    ctx.fillStyle = "#F9F6F0";
+    ctx.font = "600 34px Georgia, serif";
+    ctx.fillText(
+      `9 Complementary Hairstyles — ${report.clientTitle}`,
+      48,
+      98
+    );
+    ctx.fillStyle = "#B5ACA3";
+    ctx.font = "400 16px sans-serif";
+    ctx.fillText(report.faceShapeSummary || "", 48, 128);
+
+    // Load client image
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise<void>((resolve) => {
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      img.src = imagePreview;
+    });
+
+    const cols = 3;
+    const padX = 48;
+    const padY = 180;
+    const gap = 28;
+    const cardW = Math.floor((width - padX * 2 - gap * (cols - 1)) / cols);
+    const cardH = 536;
+
+    const wrapText = (
+      text: string,
+      x: number,
+      y: number,
+      maxWidth: number,
+      lineHeight: number,
+      maxLines: number
+    ) => {
+      const words = text.split(" ");
+      let line = "";
+      let linesDrawn = 0;
+      let curY = y;
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + " ";
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+          linesDrawn++;
+          if (linesDrawn >= maxLines) {
+            ctx.fillText(line.trim() + "…", x, curY);
+            return curY + lineHeight;
+          }
+          ctx.fillText(line.trim(), x, curY);
+          line = words[n] + " ";
+          curY += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      if (line.trim()) {
+        ctx.fillText(line.trim(), x, curY);
+        curY += lineHeight;
+      }
+      return curY;
+    };
+
+    report.hairstyleGrid.slice(0, 9).forEach((item, idx) => {
+      const col = idx % 3;
+      const row = Math.floor(idx / 3);
+      const x = padX + col * (cardW + gap);
+      const y = padY + row * (cardH + gap);
+
+      // Card Box
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(x, y, cardW, cardH);
+      ctx.strokeStyle = "#E2DCD3";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, cardW, cardH);
+
+      // Portrait Thumbnail Top Area
+      const imgH = 215;
+      ctx.fillStyle = "#221F1D";
+      ctx.fillRect(x + 16, y + 16, cardW - 32, imgH);
+      if (img.width > 0 && img.height > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x + 16, y + 16, cardW - 32, imgH);
+        ctx.clip();
+        const scale = Math.max((cardW - 32) / img.width, imgH / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        const drawX = x + 16 + (cardW - 32 - drawW) / 2;
+        const drawY = y + 16 + (imgH - drawH) / 2;
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+        // Subtle hair tone halo at top of portrait
+        const grad = ctx.createLinearGradient(x + 16, y + 16, x + 16, y + 130);
+        grad.addColorStop(0, item.recommendedToneHex + "99");
+        grad.addColorStop(1, "transparent");
+        ctx.fillStyle = grad;
+        ctx.fillRect(x + 16, y + 16, cardW - 32, 115);
+        ctx.restore();
+      }
+
+      // Number Badge
+      ctx.fillStyle = "#181615";
+      ctx.fillRect(x + 26, y + 26, 48, 28);
+      ctx.fillStyle = "#C89D66";
+      ctx.font = "600 13px monospace";
+      ctx.fillText(`0${idx + 1}`, x + 40, y + 45);
+
+      // Tone Swatch Pill
+      ctx.fillStyle = "rgba(24, 22, 21, 0.82)";
+      ctx.fillRect(x + 26, y + imgH - 18, cardW - 52, 26);
+      ctx.fillStyle = item.recommendedToneHex;
+      ctx.fillRect(x + 34, y + imgH - 12, 14, 14);
+      ctx.fillStyle = "#F9F6F0";
+      ctx.font = "500 12px monospace";
+      ctx.fillText(
+        `${item.recommendedToneName} · ${item.lengthAndCut}`.slice(0, 48),
+        x + 56,
+        y + imgH - 1
+      );
+
+      // Category & Name
+      ctx.fillStyle = "#8C7A6B";
+      ctx.font = "600 12px monospace";
+      ctx.fillText(item.category.toUpperCase(), x + 20, y + imgH + 40);
+
+      ctx.fillStyle = "#181615";
+      ctx.font = "600 22px Georgia, serif";
+      ctx.fillText(item.name.slice(0, 32), x + 20, y + imgH + 68);
+
+      // Style Description
+      ctx.fillStyle = "#8C7A6B";
+      ctx.font = "600 11px monospace";
+      ctx.fillText("THE STYLE:", x + 20, y + imgH + 96);
+      ctx.fillStyle = "#2E2A27";
+      ctx.font = "400 14px sans-serif";
+      const nextY = wrapText(
+        item.styleDescription,
+        x + 20,
+        y + imgH + 116,
+        cardW - 40,
+        20,
+        3
+      );
+
+      // Why It Complements
+      ctx.fillStyle = "#8C7A6B";
+      ctx.font = "600 11px monospace";
+      ctx.fillText("WHY IT COMPLEMENTS YOU:", x + 20, nextY + 12);
+      ctx.fillStyle = "#4A443F";
+      ctx.font = "400 14px sans-serif";
+      wrapText(
+        item.whyItComplements,
+        x + 20,
+        nextY + 32,
+        cardW - 40,
+        20,
+        4
+      );
+    });
+
+    return canvas.toDataURL("image/png");
+  }, [imagePreview, report.clientTitle, report.faceShapeSummary, report.hairstyleGrid]);
+
   const handleDownload3x3GridPoster = async () => {
-    if (!report.hairstyleGrid?.length) return;
     setIsExportingGrid(true);
     try {
-      const canvas = document.createElement("canvas");
-      const width = 1560;
-      const height = 1920;
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      // Background
-      ctx.fillStyle = "#F9F6F0";
-      ctx.fillRect(0, 0, width, height);
-
-      // Header Bar
-      ctx.fillStyle = "#181615";
-      ctx.fillRect(0, 0, width, 150);
-      ctx.fillStyle = "#C89D66";
-      ctx.font = "600 16px monospace";
-      ctx.fillText("ATELIER VERA // BESPOKE 3×3 HAIRSTYLE MATRIX", 48, 52);
-      ctx.fillStyle = "#F9F6F0";
-      ctx.font = "600 34px Georgia, serif";
-      ctx.fillText(
-        `9 Complementary Hairstyles — ${report.clientTitle}`,
-        48,
-        98
-      );
-      ctx.fillStyle = "#B5ACA3";
-      ctx.font = "400 16px sans-serif";
-      ctx.fillText(report.faceShapeSummary || "", 48, 128);
-
-      // Load client image
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      await new Promise<void>((resolve) => {
-        img.onload = () => resolve();
-        img.onerror = () => resolve();
-        img.src = imagePreview;
-      });
-
-      const cols = 3;
-      const padX = 48;
-      const padY = 180;
-      const gap = 28;
-      const cardW = Math.floor((width - padX * 2 - gap * (cols - 1)) / cols);
-      const cardH = 536;
-
-      const wrapText = (
-        text: string,
-        x: number,
-        y: number,
-        maxWidth: number,
-        lineHeight: number,
-        maxLines: number
-      ) => {
-        const words = text.split(" ");
-        let line = "";
-        let linesDrawn = 0;
-        let curY = y;
-        for (let n = 0; n < words.length; n++) {
-          const testLine = line + words[n] + " ";
-          const metrics = ctx.measureText(testLine);
-          if (metrics.width > maxWidth && n > 0) {
-            linesDrawn++;
-            if (linesDrawn >= maxLines) {
-              ctx.fillText(line.trim() + "…", x, curY);
-              return curY + lineHeight;
-            }
-            ctx.fillText(line.trim(), x, curY);
-            line = words[n] + " ";
-            curY += lineHeight;
-          } else {
-            line = testLine;
-          }
-        }
-        if (line.trim()) {
-          ctx.fillText(line.trim(), x, curY);
-          curY += lineHeight;
-        }
-        return curY;
-      };
-
-      report.hairstyleGrid.slice(0, 9).forEach((item, idx) => {
-        const col = idx % 3;
-        const row = Math.floor(idx / 3);
-        const x = padX + col * (cardW + gap);
-        const y = padY + row * (cardH + gap);
-
-        // Card Box
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(x, y, cardW, cardH);
-        ctx.strokeStyle = "#E2DCD3";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, cardW, cardH);
-
-        // Portrait Thumbnail Top Area
-        const imgH = 215;
-        ctx.fillStyle = "#221F1D";
-        ctx.fillRect(x + 16, y + 16, cardW - 32, imgH);
-        if (img.width > 0 && img.height > 0) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(x + 16, y + 16, cardW - 32, imgH);
-          ctx.clip();
-          const scale = Math.max(
-            (cardW - 32) / img.width,
-            imgH / img.height
-          );
-          const drawW = img.width * scale;
-          const drawH = img.height * scale;
-          const drawX = x + 16 + (cardW - 32 - drawW) / 2;
-          const drawY = y + 16 + (imgH - drawH) / 2;
-          ctx.drawImage(img, drawX, drawY, drawW, drawH);
-
-          // Subtle hair tone halo at top of portrait
-          const grad = ctx.createLinearGradient(x + 16, y + 16, x + 16, y + 130);
-          grad.addColorStop(0, item.recommendedToneHex + "99");
-          grad.addColorStop(1, "transparent");
-          ctx.fillStyle = grad;
-          ctx.fillRect(x + 16, y + 16, cardW - 32, 115);
-          ctx.restore();
-        }
-
-        // Number Badge
-        ctx.fillStyle = "#181615";
-        ctx.fillRect(x + 26, y + 26, 48, 28);
-        ctx.fillStyle = "#C89D66";
-        ctx.font = "600 13px monospace";
-        ctx.fillText(`0${idx + 1}`, x + 40, y + 45);
-
-        // Tone Swatch Pill
-        ctx.fillStyle = "rgba(24, 22, 21, 0.82)";
-        ctx.fillRect(x + 26, y + imgH - 18, cardW - 52, 26);
-        ctx.fillStyle = item.recommendedToneHex;
-        ctx.fillRect(x + 34, y + imgH - 12, 14, 14);
-        ctx.fillStyle = "#F9F6F0";
-        ctx.font = "500 12px monospace";
-        ctx.fillText(
-          `${item.recommendedToneName} · ${item.lengthAndCut}`.slice(0, 48),
-          x + 56,
-          y + imgH - 1
-        );
-
-        // Category & Name
-        ctx.fillStyle = "#8C7A6B";
-        ctx.font = "600 12px monospace";
-        ctx.fillText(item.category.toUpperCase(), x + 20, y + imgH + 40);
-
-        ctx.fillStyle = "#181615";
-        ctx.font = "600 22px Georgia, serif";
-        ctx.fillText(item.name.slice(0, 32), x + 20, y + imgH + 68);
-
-        // Style Description
-        ctx.fillStyle = "#8C7A6B";
-        ctx.font = "600 11px monospace";
-        ctx.fillText("THE STYLE:", x + 20, y + imgH + 96);
-        ctx.fillStyle = "#2E2A27";
-        ctx.font = "400 14px sans-serif";
-        const nextY = wrapText(
-          item.styleDescription,
-          x + 20,
-          y + imgH + 116,
-          cardW - 40,
-          20,
-          3
-        );
-
-        // Why It Complements
-        ctx.fillStyle = "#8C7A6B";
-        ctx.font = "600 11px monospace";
-        ctx.fillText("WHY IT COMPLEMENTS YOU:", x + 20, nextY + 12);
-        ctx.fillStyle = "#4A443F";
-        ctx.font = "400 14px sans-serif";
-        wrapText(
-          item.whyItComplements,
-          x + 20,
-          nextY + 32,
-          cardW - 40,
-          20,
-          4
-        );
-      });
-
+      const dataUrl = await buildCanvas3x3DataUrl();
+      if (!dataUrl) return;
       const link = document.createElement("a");
       link.download = "atelier-vera-3x3-hairstyles.png";
-      link.href = canvas.toDataURL("image/png");
+      link.href = dataUrl;
       link.click();
     } finally {
       setIsExportingGrid(false);
@@ -409,26 +412,29 @@ export default function ConsultationReportView({
       });
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
-        setAiGridError(
-          "Cloudflare Pages Function /api/hairstyle-grid requires deployment or wrangler pages dev. Use 'Download 3×3 Grid Poster (PNG)' for instant export."
-        );
+        const fallbackUrl = await buildCanvas3x3DataUrl();
+        if (fallbackUrl) setAiGridImageUrl(fallbackUrl);
         return;
       }
       const data = await res.json();
       if (!res.ok || !data.imageUrl) {
+        const fallbackUrl = await buildCanvas3x3DataUrl();
+        if (fallbackUrl) setAiGridImageUrl(fallbackUrl);
         setAiGridError(
           data.error ||
-            "Could not generate AI hairstyle sheet. Ensure GEMINI_API_KEY or OPENAI_API_KEY is configured in Cloudflare Pages."
+            "Gemini Free Tier quota reached for direct image generation; displaying Atelier 3×3 Composite Sheet."
         );
       } else {
         setAiGridImageUrl(data.imageUrl);
       }
     } catch {
-      setAiGridError("Network error while requesting AI 3×3 hairstyle sheet.");
+      const fallbackUrl = await buildCanvas3x3DataUrl();
+      if (fallbackUrl) setAiGridImageUrl(fallbackUrl);
     } finally {
       setIsGeneratingAiGrid(false);
     }
   }, [
+    buildCanvas3x3DataUrl,
     clientApiKey,
     imagePreview,
     rasterizePreviewIfNeeded,
@@ -438,15 +444,7 @@ export default function ConsultationReportView({
   ]);
 
   useEffect(() => {
-    if (
-      (report.source === "gemini-vision" ||
-        report.source === "openai-vision" ||
-        Boolean(clientApiKey?.trim())) &&
-      !aiGridImageUrl &&
-      !isGeneratingAiGrid
-    ) {
-      handleGenerateAi3x3Sheet();
-    }
+    handleGenerateAi3x3Sheet();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.generatedAt]);
 
