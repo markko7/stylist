@@ -29,6 +29,7 @@ export default function ConsultationReportView({
   const [isExportingGrid, setIsExportingGrid] = useState<boolean>(false);
   const [isGeneratingAiGrid, setIsGeneratingAiGrid] = useState<boolean>(false);
   const [aiGridImageUrl, setAiGridImageUrl] = useState<string | null>(null);
+  const [aiGridProvider, setAiGridProvider] = useState<string | null>(null);
   const [aiGridError, setAiGridError] = useState<string | null>(null);
 
   const handleCopyHex = (hex: string) => {
@@ -419,17 +420,24 @@ export default function ConsultationReportView({
       const data = await res.json();
       if (!res.ok || !data.imageUrl) {
         const fallbackUrl = await buildCanvas3x3DataUrl();
-        if (fallbackUrl) setAiGridImageUrl(fallbackUrl);
+        if (fallbackUrl) {
+          setAiGridImageUrl(fallbackUrl);
+          setAiGridProvider(null);
+        }
         setAiGridError(
           data.error ||
             "Gemini Free Tier quota reached for direct image generation; displaying Atelier 3×3 Composite Sheet."
         );
       } else {
         setAiGridImageUrl(data.imageUrl);
+        setAiGridProvider(data.provider || "ai-grid");
       }
     } catch {
       const fallbackUrl = await buildCanvas3x3DataUrl();
-      if (fallbackUrl) setAiGridImageUrl(fallbackUrl);
+      if (fallbackUrl) {
+        setAiGridImageUrl(fallbackUrl);
+        setAiGridProvider(null);
+      }
     } finally {
       setIsGeneratingAiGrid(false);
     }
@@ -1012,6 +1020,9 @@ export default function ConsultationReportView({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {(report.hairstyleGrid || []).slice(0, 9).map((style, idx) => {
                 const isSelected = selectedHairstyleId === style.id;
+                const col = idx % 3;
+                const row = Math.floor(idx / 3);
+                const hasAiTile = Boolean(aiGridImageUrl && aiGridProvider);
                 return (
                   <div
                     key={style.id || idx}
@@ -1023,30 +1034,51 @@ export default function ConsultationReportView({
                     }`}
                   >
                     <div className="space-y-4">
-                      {/* Visual Portrait Preview with Hairstyle Contour Overlay */}
-                      <div className="relative h-52 rounded-xl overflow-hidden bg-[#221F1D] border border-black/15">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={imagePreview}
-                          alt={style.name}
-                          className="w-full h-full object-cover object-top transition duration-500 group-hover:scale-105"
-                        />
+                      {/* Visual Portrait Preview: AI 3×3 Tile or Portrait + Contour Overlay */}
+                      <div className="relative h-60 rounded-xl overflow-hidden bg-[#221F1D] border border-black/15">
+                        {hasAiTile ? (
+                          <div
+                            className="w-full h-full bg-no-repeat transition duration-500 group-hover:scale-105"
+                            style={{
+                              backgroundImage: `url("${aiGridImageUrl}")`,
+                              backgroundSize: "300% 300%",
+                              backgroundPosition: `${col * 50}% ${row * 50}%`,
+                            }}
+                          />
+                        ) : (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imagePreview}
+                              alt={style.name}
+                              className="w-full h-full object-cover object-top transition duration-500 group-hover:scale-105"
+                            />
 
-                        {/* Subtle Hair Tone Lighting Gradient */}
-                        <div
-                          className="absolute inset-0 pointer-events-none"
-                          style={{
-                            background: `linear-gradient(180deg, ${style.recommendedToneHex}75 0%, transparent 55%, rgba(18,16,15,0.82) 100%)`,
-                          }}
-                        />
+                            {/* Subtle Hair Tone Lighting Gradient */}
+                            <div
+                              className="absolute inset-0 pointer-events-none"
+                              style={{
+                                background: `linear-gradient(180deg, ${style.recommendedToneHex}75 0%, transparent 55%, rgba(18,16,15,0.82) 100%)`,
+                              }}
+                            />
 
-                        {/* Architectural Hairstyle Silhouette Overlay */}
-                        <div className="absolute inset-0 flex items-start justify-center opacity-85">
-                          {renderHairstyleSilhouetteSvg(
-                            style.silhouetteVariant || idx + 1,
-                            style.recommendedToneHex
-                          )}
-                        </div>
+                            {/* Architectural Hairstyle Silhouette Overlay */}
+                            <div className="absolute inset-0 flex items-start justify-center opacity-85">
+                              {renderHairstyleSilhouetteSvg(
+                                style.silhouetteVariant || idx + 1,
+                                style.recommendedToneHex
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {isGeneratingAiGrid && (
+                          <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px] flex items-center justify-center">
+                            <span className="px-3 py-1.5 rounded-full bg-black/80 text-[11px] font-mono-tech text-[#C89D66] border border-[#C89D66]/40 animate-pulse">
+                              Synthesizing Style 0{idx + 1}...
+                            </span>
+                          </div>
+                        )}
 
                         {/* Top Grid Cell Number & Category Badge */}
                         <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2">

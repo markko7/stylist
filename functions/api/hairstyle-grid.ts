@@ -41,63 +41,121 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-async function extractPersonPortraitDescriptionWithGemini(
-  geminiKey: string,
-  imageBase64?: string,
+function base64ToBlob(base64Data: string, mimeType: string): Blob {
+  const byteChars = atob(base64Data);
+  const byteArrays: Uint8Array[] = [];
+  const sliceSize = 1024;
+  for (let offset = 0; offset < byteChars.length; offset += sliceSize) {
+    const slice = byteChars.slice(offset, offset + sliceSize);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    byteArrays.push(new Uint8Array(byteNumbers));
+  }
+  return new Blob(byteArrays, { type: mimeType });
+}
+
+async function extractPersonDescription(
+  imageBase64: string | undefined,
+  openAiKey: string | undefined,
+  geminiKey: string | undefined,
   fallbackSeason?: string
 ): Promise<string> {
   if (
     !imageBase64 ||
-    !/^data:image\/(jpeg|jpg|png|webp|heic|heif);base64,/i.test(imageBase64)
+    !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(imageBase64)
   ) {
-    return `a stylish ${fallbackSeason || "warm-toned"} portrait model with balanced facial features`;
+    return `a stylish ${fallbackSeason || "warm-toned"} portrait subject with balanced facial features`;
   }
 
-  try {
-    const mimeMatch = imageBase64.match(/^data:(image\/[\w+]+);base64,/i);
-    const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
-    const base64Data = imageBase64.replace(/^data:image\/[\w+]+;base64,/i, "");
+  const visionPrompt =
+    "Describe the person in this photo in 2 detailed sentences for a portrait illustrator creating a 3x3 hairstyle lookbook of this exact person: include gender presentation, approximate age, ethnicity/skin tone, face shape, eye color, eyebrows, nose/lip structure, current hair color/texture, glasses if any, and expression. Do not include names.";
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-      {
+  // 1. Try OpenAI gpt-4o-mini Vision if available
+  if (openAiKey) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openAiKey}`,
+        },
         body: JSON.stringify({
-          contents: [
+          model: "gpt-4o-mini",
+          messages: [
             {
               role: "user",
-              parts: [
+              content: [
+                { type: "text", text: visionPrompt },
                 {
-                  text: "Describe the person in this portrait in 1 concise sentence for an artist creating a hairstyle reference sheet (mention approximate age range, gender presentation, skin tone, face shape, eye color, hair color, and expression, without any names or PII).",
-                },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Data,
-                  },
+                  type: "image_url",
+                  image_url: { url: imageBase64, detail: "low" },
                 },
               ],
             },
           ],
+          max_tokens: 180,
         }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          choices?: Array<{ message?: { content?: string } }>;
+        };
+        const text = data?.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
       }
-    );
-
-    if (res.ok) {
-      const data = (await res.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-        }>;
-      };
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (text) return text;
+    } catch {
+      // Fall through to Gemini Vision
     }
-  } catch {
-    // Ignore and use fallback
   }
 
-  return `a stylish ${fallbackSeason || "contemporary"} portrait model with balanced facial features`;
+  // 2. Try Gemini 2.5 Flash Vision
+  if (geminiKey) {
+    try {
+      const mimeMatch = imageBase64.match(/^data:(image\/[\w+]+);base64,/i);
+      const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
+      const base64Data = imageBase64.replace(/^data:image\/[\w+]+;base64,/i, "");
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: visionPrompt },
+                  {
+                    inline_data: {
+                      mime_type: mimeType,
+                      data: base64Data,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
+
+      if (res.ok) {
+        const data = (await res.json()) as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ text?: string }> };
+          }>;
+        };
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return text;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  return `a stylish ${fallbackSeason || "contemporary"} portrait subject with balanced facial features`;
 }
 
 export async function onRequestPost(
@@ -123,24 +181,86 @@ export async function onRequestPost(
 
     const stylesList = (body.hairstyleGrid || [])
       .slice(0, 9)
-      .map((item, idx) => `${idx + 1}. ${item.name} (${item.lengthAndCut})`)
-      .join(", ");
+      .map(
+        (item, idx) =>
+          `Panel ${idx + 1} (Row ${Math.floor(idx / 3) + 1}, Col ${
+            (idx % 3) + 1
+          }): ${item.name} (${item.lengthAndCut})`
+      )
+      .join("; ");
 
-    let geminiQuotaMessage = "";
+    const hasRasterPhoto =
+      Boolean(body.imageBase64) &&
+      /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(body.imageBase64 || "");
 
-    // 1. Try Gemini 2.5 Flash Image first if GEMINI_API_KEY is present
+    // 1. Try OpenAI gpt-image-1 Image Edit with the attached photo first (if OPENAI_API_KEY is present)
+    if (openAiKey && hasRasterPhoto && body.imageBase64) {
+      try {
+        const mimeMatch = body.imageBase64.match(
+          /^data:(image\/[\w+]+);base64,/i
+        );
+        const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+        const base64Data = body.imageBase64.replace(
+          /^data:image\/[\w+]+;base64,/i,
+          ""
+        );
+        const imageBlob = base64ToBlob(base64Data, mimeType);
+        const ext = mimeType.includes("png") ? "png" : "jpg";
+
+        const editPrompt = `Create a seamless 3x3 grid (3 rows by 3 columns, 9 equal square panels filling the entire canvas with no outer border) featuring nine different hairstyles that best suit the person in the attached photo, preserving their exact facial identity and likeness in every panel: ${stylesList}. Photorealistic studio portrait lighting.`;
+
+        const formData = new FormData();
+        formData.append("model", "gpt-image-1");
+        formData.append("image", imageBlob, `portrait.${ext}`);
+        formData.append("prompt", editPrompt);
+        formData.append("size", "1024x1024");
+
+        const editRes = await fetch("https://api.openai.com/v1/images/edits", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openAiKey}`,
+          },
+          body: formData,
+        });
+
+        if (editRes.ok) {
+          const editData = (await editRes.json()) as {
+            data?: Array<{ b64_json?: string; url?: string }>;
+          };
+          const b64 = editData?.data?.[0]?.b64_json;
+          const url = editData?.data?.[0]?.url;
+          if (b64) {
+            return Response.json(
+              {
+                imageUrl: `data:image/png;base64,${b64}`,
+                provider: "openai-gpt-image-1",
+              },
+              { status: 200, headers: CORS_HEADERS }
+            );
+          }
+          if (url) {
+            return Response.json(
+              {
+                imageUrl: url,
+                provider: "openai-gpt-image-1",
+              },
+              { status: 200, headers: CORS_HEADERS }
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("OpenAI gpt-image-1 edit fallback:", err);
+      }
+    }
+
+    // 2. Try Gemini 2.5 Flash Image with the attached photo (if GEMINI_API_KEY is present)
     if (geminiKey) {
       try {
-        const geminiPrompt = `Create a 3x3 grid composite image featuring nine different hairstyles that would best suit the person in the attached photo, preserving the person's facial identity and likeness in each of the 9 panels: ${stylesList}. Use clean studio portrait lighting on a warm neutral editorial background.`;
+        const geminiPrompt = `Create a seamless 3x3 grid composite image (3 rows by 3 columns, 9 equal square panels) featuring nine different hairstyles that would best suit the person in the attached photo, preserving the person's facial identity and likeness in each of the 9 panels: ${stylesList}. Use clean studio portrait lighting on a warm neutral editorial background.`;
 
         const parts: Array<Record<string, unknown>> = [{ text: geminiPrompt }];
 
-        if (
-          body.imageBase64 &&
-          /^data:image\/(jpeg|jpg|png|webp|heic|heif);base64,/i.test(
-            body.imageBase64
-          )
-        ) {
+        if (hasRasterPhoto && body.imageBase64) {
           const mimeMatch = body.imageBase64.match(
             /^data:(image\/[\w+]+);base64,/i
           );
@@ -203,85 +323,74 @@ export async function onRequestPost(
               );
             }
           }
-        } else {
-          const errData = (await geminiRes.json().catch(() => ({}))) as {
-            error?: { message?: string };
-          };
-          geminiQuotaMessage =
-            errData?.error?.message ||
-            `Gemini returned HTTP ${geminiRes.status}`;
         }
       } catch (err) {
         console.warn("Gemini image generation error:", err);
       }
     }
 
-    // 2. If Gemini Image model hit Free Tier quota (limit: 0 on Free Tier),
-    // use Gemini 2.5 Flash Vision (Free Tier supported) + Cloudflare Workers AI!
-    if (context.env?.AI) {
-      const personDesc = geminiKey
-        ? await extractPersonPortraitDescriptionWithGemini(
-            geminiKey,
-            body.imageBase64,
-            body.season
-          )
-        : `a stylish ${body.genderFit || "contemporary"} model (${
-            body.season || "neutral undertone"
-          })`;
+    // Extract detailed appearance description from the uploaded photo using Vision (OpenAI or Gemini)
+    const personDesc = await extractPersonDescription(
+      body.imageBase64,
+      openAiKey,
+      geminiKey,
+      body.season
+    );
 
-      const aiPrompt = `High-fashion studio photography 3x3 grid contact sheet of 9 head-and-shoulders portraits of the exact same person (${personDesc}), each panel showing a different complementary hairstyle: ${stylesList}. Symmetrical 3 rows by 3 columns layout, warm cream studio background, editorial salon lookbook, photorealistic, sharp focus.`;
-
-      // Try Flux-1-Schnell first
+    // 3. Try OpenAI DALL-E 3 (with b64_json so the image never expires and can be sliced into the 9 cards!)
+    if (openAiKey) {
       try {
-        const fluxRes = (await context.env.AI.run(
-          "@cf/black-forest-labs/flux-1-schnell",
-          {
-            prompt: aiPrompt,
-            num_steps: 4,
-          }
-        )) as { image?: string };
+        const dallePrompt = `A seamless 3x3 grid contact sheet (3 rows by 3 columns, 9 equal square portrait panels filling the entire frame) showing the exact same person (${personDesc}) wearing 9 different complementary hairstyles: ${stylesList}. Photorealistic high-fashion salon lookbook photography, studio lighting, consistent face across all 9 panels.`;
 
-        if (fluxRes && typeof fluxRes.image === "string" && fluxRes.image) {
-          return Response.json(
-            {
-              imageUrl: `data:image/jpeg;base64,${fluxRes.image}`,
-              provider: "gemini-vision+cloudflare-flux",
+        const response = await fetch(
+          "https://api.openai.com/v1/images/generations",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${openAiKey}`,
             },
-            { status: 200, headers: CORS_HEADERS }
-          );
-        }
-      } catch {
-        // Auto-accept Flux license or fallback to SDXL-Lightning
-        try {
-          await context.env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-            prompt: "agree",
-          });
-          const fluxRetry = (await context.env.AI.run(
-            "@cf/black-forest-labs/flux-1-schnell",
-            {
-              prompt: aiPrompt,
-              num_steps: 4,
-            }
-          )) as { image?: string };
-          if (
-            fluxRetry &&
-            typeof fluxRetry.image === "string" &&
-            fluxRetry.image
-          ) {
+            body: JSON.stringify({
+              model: "dall-e-3",
+              prompt: dallePrompt,
+              n: 1,
+              size: "1024x1024",
+              response_format: "b64_json",
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const data = (await response.json()) as {
+            data?: Array<{ url?: string; b64_json?: string }>;
+          };
+          const b64 = data?.data?.[0]?.b64_json;
+          const url = data?.data?.[0]?.url;
+          if (b64) {
             return Response.json(
               {
-                imageUrl: `data:image/jpeg;base64,${fluxRetry.image}`,
-                provider: "gemini-vision+cloudflare-flux",
+                imageUrl: `data:image/png;base64,${b64}`,
+                provider: "openai-dalle3",
               },
               { status: 200, headers: CORS_HEADERS }
             );
           }
-        } catch {
-          // Proceed to SDXL-Lightning fallback
+          if (url) {
+            return Response.json(
+              { imageUrl: url, provider: "openai-dalle3" },
+              { status: 200, headers: CORS_HEADERS }
+            );
+          }
         }
+      } catch (openAiErr) {
+        console.warn("OpenAI DALL-E 3 error:", openAiErr);
       }
+    }
 
-      // Try SDXL-Lightning on Cloudflare Workers AI
+    // 4. Fallback to Cloudflare Workers AI (Flux-1-Schnell or SDXL-Lightning)
+    if (context.env?.AI) {
+      const aiPrompt = `Seamless 3x3 grid contact sheet (3 rows by 3 columns, 9 equal square portrait panels) of the exact same person (${personDesc}), each panel showing a different complementary hairstyle: ${stylesList}. Warm cream studio background, editorial salon lookbook, photorealistic, sharp focus.`;
+
       try {
         const sdxlStream = await context.env.AI.run(
           "@cf/bytedance/stable-diffusion-xl-lightning",
@@ -295,7 +404,7 @@ export async function onRequestPost(
           return Response.json(
             {
               imageUrl: `data:image/png;base64,${b64}`,
-              provider: "gemini-vision+cloudflare-sdxl",
+              provider: "cloudflare-sdxl",
             },
             { status: 200, headers: CORS_HEADERS }
           );
@@ -305,54 +414,10 @@ export async function onRequestPost(
       }
     }
 
-    // 3. Fallback to OpenAI DALL-E 3 if OPENAI_API_KEY is present
-    if (openAiKey) {
-      try {
-        const prompt = `Editorial salon lookbook 3x3 grid composite featuring nine distinct complementary hairstyles for a ${
-          body.genderFit || "contemporary"
-        } client (${body.season || "neutral"} palette, ${
-          body.faceShapeSummary || "balanced facial proportions"
-        }): ${stylesList}. Clean studio lighting, warm alabaster background, high-fashion portrait photography, 3 rows by 3 columns grid layout.`;
-
-        const response = await fetch(
-          "https://api.openai.com/v1/images/generations",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${openAiKey}`,
-            },
-            body: JSON.stringify({
-              model: "dall-e-3",
-              prompt,
-              n: 1,
-              size: "1024x1024",
-            }),
-          }
-        );
-
-        if (response.ok) {
-          const data = (await response.json()) as {
-            data?: Array<{ url?: string; b64_json?: string }>;
-          };
-          const imageUrl = data?.data?.[0]?.url;
-          if (imageUrl) {
-            return Response.json(
-              { imageUrl, provider: "openai-dalle3" },
-              { status: 200, headers: CORS_HEADERS }
-            );
-          }
-        }
-      } catch (openAiErr) {
-        console.warn("OpenAI image fallback error:", openAiErr);
-      }
-    }
-
     return Response.json(
       {
         error:
-          geminiQuotaMessage ||
-          "Gemini Free Tier has limit: 0 for gemini-2.5-flash-image. Displaying the Atelier 3×3 Composite Sheet.",
+          "Could not generate AI 3×3 hairstyle sheet. Displaying the Atelier 3×3 Composite Sheet.",
       },
       { status: 429, headers: CORS_HEADERS }
     );
