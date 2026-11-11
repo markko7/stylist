@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { ConsultationReport, ExtractedPhotoMetrics } from "@/types/consultation";
 
 interface ConsultationReportViewProps {
   report: ConsultationReport;
   imagePreview: string;
   photoMetrics: ExtractedPhotoMetrics;
+  clientApiKey?: string;
   onReset: () => void;
 }
 
@@ -14,6 +15,7 @@ export default function ConsultationReportView({
   report,
   imagePreview,
   photoMetrics,
+  clientApiKey,
   onReset,
 }: ConsultationReportViewProps) {
   const [activeTab, setActiveTab] = useState<
@@ -365,23 +367,50 @@ export default function ConsultationReportView({
     }
   };
 
-  const handleGenerateAi3x3Sheet = async () => {
+  const rasterizePreviewIfNeeded = useCallback(async (src: string): Promise<string> => {
+    if (!src.startsWith("data:image/svg")) {
+      return src;
+    }
+    return new Promise<string>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = 640;
+        c.height = 800;
+        const ctx = c.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL("image/png"));
+        } else {
+          resolve(src);
+        }
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+  }, []);
+
+  const handleGenerateAi3x3Sheet = useCallback(async () => {
     setIsGeneratingAiGrid(true);
     setAiGridError(null);
     try {
+      const rasterImage = await rasterizePreviewIfNeeded(imagePreview);
       const res = await fetch("/api/hairstyle-grid", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          imageBase64: rasterImage,
           hairstyleGrid: report.hairstyleGrid,
           faceShapeSummary: report.faceShapeSummary,
           season: report.colorAnalysis.season,
+          clientApiKey: clientApiKey?.trim() || undefined,
         }),
       });
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
         setAiGridError(
-          "Cloudflare Pages Function /api/hairstyle-grid requires deployment or wrangler pages dev. Use 'Download 3×3 Poster (PNG)' for instant export."
+          "Cloudflare Pages Function /api/hairstyle-grid requires deployment or wrangler pages dev. Use 'Download 3×3 Grid Poster (PNG)' for instant export."
         );
         return;
       }
@@ -389,7 +418,7 @@ export default function ConsultationReportView({
       if (!res.ok || !data.imageUrl) {
         setAiGridError(
           data.error ||
-            "Could not generate AI lookbook image. Ensure OPENAI_API_KEY is configured in Cloudflare Pages."
+            "Could not generate AI hairstyle sheet. Ensure GEMINI_API_KEY or OPENAI_API_KEY is configured in Cloudflare Pages."
         );
       } else {
         setAiGridImageUrl(data.imageUrl);
@@ -399,7 +428,27 @@ export default function ConsultationReportView({
     } finally {
       setIsGeneratingAiGrid(false);
     }
-  };
+  }, [
+    clientApiKey,
+    imagePreview,
+    rasterizePreviewIfNeeded,
+    report.colorAnalysis.season,
+    report.faceShapeSummary,
+    report.hairstyleGrid,
+  ]);
+
+  useEffect(() => {
+    if (
+      (report.source === "gemini-vision" ||
+        report.source === "openai-vision" ||
+        Boolean(clientApiKey?.trim())) &&
+      !aiGridImageUrl &&
+      !isGeneratingAiGrid
+    ) {
+      handleGenerateAi3x3Sheet();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.generatedAt]);
 
   const sourceBadge =
     report.source === "gemini-vision"
@@ -909,8 +958,10 @@ export default function ConsultationReportView({
                   className="px-4 py-2.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-[#F9F6F0] hover:bg-[#EFECE6] text-[#181615] border border-[#D5CEC2] transition cursor-pointer disabled:opacity-60"
                 >
                   {isGeneratingAiGrid
-                    ? "Generating OpenAI 3×3 Sheet..."
-                    : "AI 3×3 Salon Sheet (OpenAI)"}
+                    ? "Generating AI 3×3 Hairstyle Sheet..."
+                    : aiGridImageUrl
+                    ? "Regenerate AI 3×3 Sheet (Gemini / OpenAI)"
+                    : "Generate AI 3×3 Sheet (Gemini / OpenAI)"}
                 </button>
               </div>
             </div>
@@ -921,19 +972,33 @@ export default function ConsultationReportView({
               </div>
             )}
 
+            {isGeneratingAiGrid && !aiGridImageUrl && (
+              <div className="p-6 rounded-2xl bg-[#181615] text-[#F9F6F0] border border-[#332E2A] flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <span className="text-xs font-mono-tech uppercase tracking-widest text-[#C89D66] block animate-pulse">
+                    Gemini 2.5 Flash Image // Synthesizing 3×3 Hairstyle Portrait Grid...
+                  </span>
+                  <p className="text-xs text-[#B5ACA3]">
+                    Generating nine complementary hairstyles tailored to your uploaded photo and facial geometry.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {aiGridImageUrl && (
               <div className="p-4 rounded-2xl bg-[#181615] text-[#F9F6F0] space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono-tech uppercase tracking-widest text-[#C89D66]">
-                    OpenAI Generated 3×3 Salon Lookbook Composite
+                    AI Generated 3×3 Hairstyle Composite (Gemini / OpenAI)
                   </span>
                   <a
                     href={aiGridImageUrl}
+                    download="atelier-vera-ai-3x3-hairstyles.png"
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs underline text-[#D8C3A5]"
                   >
-                    Open Full Size
+                    Download / Open Full Size
                   </a>
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}

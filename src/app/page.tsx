@@ -268,6 +268,7 @@ export default function HomePage() {
             report={report}
             imagePreview={imageBase64}
             photoMetrics={photoMetrics}
+            clientApiKey={clientApiKey}
             onReset={() => setReport(null)}
           />
         ) : (
