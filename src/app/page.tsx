@@ -15,6 +15,7 @@ import {
   calculateBmi,
   cmToFtIn,
   ftInToCm,
+  generateConsultationWithOptionalAI,
   kgToLbs,
   lbsToKg,
 } from "@/lib/consultationEngine";
@@ -117,37 +118,48 @@ export default function HomePage() {
   const handleSubmitConsultation = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (!imageBase64) {
+      setErrorMsg("Please upload or select a photo to run the style analysis.");
+      return;
+    }
+
+    if (
+      !Number.isFinite(heightCm) ||
+      heightCm < 120 ||
+      heightCm > 235 ||
+      !Number.isFinite(weightKg) ||
+      weightKg < 30 ||
+      weightKg > 250
+    ) {
+      setErrorMsg(
+        "Please enter valid height (120–235 cm / 4'0\"–7'8\") and weight (30–250 kg / 66–550 lbs) measurements."
+      );
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
-      const res = await fetch("/api/consult", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64,
-          photoMetrics,
-          unitSystem,
-          heightCm,
-          weightKg,
-          genderFit,
-          aesthetic,
-          occasion,
-          budget,
-          fitPreference,
-          customNotes,
-          clientApiKey: clientApiKey.trim() || undefined,
-        }),
+      const generatedReport = await generateConsultationWithOptionalAI({
+        imageBase64,
+        photoMetrics,
+        unitSystem,
+        heightCm,
+        weightKg,
+        genderFit,
+        aesthetic,
+        occasion,
+        budget,
+        fitPreference,
+        customNotes,
+        clientApiKey: clientApiKey.trim() || undefined,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMsg(data.error || "Consultation request failed.");
-      } else {
-        setReport(data as ConsultationReport);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
+      setReport(generatedReport);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
-      setErrorMsg("Network error while generating your style dossier.");
+      setErrorMsg("Unable to generate your style dossier. Please check your inputs.");
     } finally {
       setIsGenerating(false);
     }
