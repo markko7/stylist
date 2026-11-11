@@ -140,26 +140,52 @@ export default function HomePage() {
 
     setIsGenerating(true);
 
+    const requestPayload = {
+      imageBase64,
+      photoMetrics,
+      unitSystem,
+      heightCm,
+      weightKg,
+      genderFit,
+      aesthetic,
+      occasion,
+      budget,
+      fitPreference,
+      customNotes,
+      clientApiKey: clientApiKey.trim() || undefined,
+    };
+
     try {
-      const generatedReport = await generateConsultationWithOptionalAI({
-        imageBase64,
-        photoMetrics,
-        unitSystem,
-        heightCm,
-        weightKg,
-        genderFit,
-        aesthetic,
-        occasion,
-        budget,
-        fitPreference,
-        customNotes,
-        clientApiKey: clientApiKey.trim() || undefined,
+      const res = await fetch("/api/consult", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestPayload),
       });
 
-      setReport(generatedReport);
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = await res.json();
+        if (!res.ok) {
+          setErrorMsg(data.error || "Consultation request failed.");
+          return;
+        }
+        setReport(data as ConsultationReport);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      // Fallback when running static preview without Cloudflare Pages Functions runtime
+      const fallbackReport = await generateConsultationWithOptionalAI(requestPayload);
+      setReport(fallbackReport);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
-      setErrorMsg("Unable to generate your style dossier. Please check your inputs.");
+      try {
+        const fallbackReport = await generateConsultationWithOptionalAI(requestPayload);
+        setReport(fallbackReport);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {
+        setErrorMsg("Unable to generate your style dossier. Please check your inputs.");
+      }
     } finally {
       setIsGenerating(false);
     }

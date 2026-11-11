@@ -22,3 +22,15 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Cloudflare Pages Deployment & Pages Functions
+
+This project exports static assets to `out/` and includes a Cloudflare Pages Function at `functions/api/consult.ts` (`POST /api/consult`) that calls the OpenAI Vision API (`gpt-4o-mini` by default) to generate the personalized style consulting report.
+
+### Cloudflare Pages Settings
+- **Build command**: `npm run build`
+- **Build output directory**: `out`
+- **Environment variables** (Settings -> Environment variables):
+  - `OPENAI_API_KEY`: Your OpenAI API key (`sk-...`)
+  - `OPENAI_MODEL` *(optional)*: Defaults to `gpt-4o-mini` (or set to `gpt-4o`)
+

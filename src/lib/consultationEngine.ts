@@ -5,7 +5,7 @@ import {
   AvoidColorSwatch,
   CuratedOutfit,
   ShoppingItem,
-} from "@/types/consultation";
+} from "../types/consultation";
 
 export function cmToFtIn(cm: number): { feet: number; inches: number; label: string } {
   const totalInches = cm / 2.54;
@@ -607,38 +607,288 @@ export function generateAtelierConsultation(req: ConsultationRequest): Consultat
   };
 }
 
+export interface AIEnvConfig {
+  openAiApiKey?: string;
+  openAiModel?: string;
+  geminiApiKey?: string;
+}
+
+function mergeReportWithOverrides(
+  baseReport: ConsultationReport,
+  parsed: Record<string, unknown>,
+  source: ConsultationReport["source"]
+): ConsultationReport {
+  const parsedMetrics =
+    parsed.metricsAnalysis && typeof parsed.metricsAnalysis === "object"
+      ? (parsed.metricsAnalysis as Record<string, unknown>)
+      : {};
+  const parsedSizes =
+    parsedMetrics.recommendedSizes &&
+    typeof parsedMetrics.recommendedSizes === "object"
+      ? (parsedMetrics.recommendedSizes as Record<string, unknown>)
+      : {};
+  const parsedColor =
+    parsed.colorAnalysis && typeof parsed.colorAnalysis === "object"
+      ? (parsed.colorAnalysis as Record<string, unknown>)
+      : {};
+  const parsedSilhouette =
+    parsed.silhouetteAndFit && typeof parsed.silhouetteAndFit === "object"
+      ? (parsed.silhouetteAndFit as Record<string, unknown>)
+      : {};
+
+  const tailoringNotes =
+    Array.isArray(parsed.tailoringNotes) && parsed.tailoringNotes.length > 0
+      ? (parsed.tailoringNotes as string[])
+      : Array.isArray(parsedMetrics.tailoringNotes) &&
+        parsedMetrics.tailoringNotes.length > 0
+      ? (parsedMetrics.tailoringNotes as string[])
+      : baseReport.metricsAnalysis.tailoringNotes;
+
+  return {
+    ...baseReport,
+    source,
+    clientTitle:
+      typeof parsed.clientTitle === "string" && parsed.clientTitle.trim()
+        ? parsed.clientTitle
+        : baseReport.clientTitle,
+    stylistSummary:
+      typeof parsed.stylistSummary === "string" && parsed.stylistSummary.trim()
+        ? parsed.stylistSummary
+        : baseReport.stylistSummary,
+    metricsAnalysis: {
+      ...baseReport.metricsAnalysis,
+      frameProfile:
+        typeof parsedMetrics.frameProfile === "string" &&
+        parsedMetrics.frameProfile.trim()
+          ? parsedMetrics.frameProfile
+          : baseReport.metricsAnalysis.frameProfile,
+      verticalRuleOfThirds:
+        typeof parsedMetrics.verticalRuleOfThirds === "string" &&
+        parsedMetrics.verticalRuleOfThirds.trim()
+          ? parsedMetrics.verticalRuleOfThirds
+          : baseReport.metricsAnalysis.verticalRuleOfThirds,
+      recommendedSizes: {
+        tops:
+          typeof parsedSizes.tops === "string" && parsedSizes.tops.trim()
+            ? parsedSizes.tops
+            : baseReport.metricsAnalysis.recommendedSizes.tops,
+        bottomsWaist:
+          typeof parsedSizes.bottomsWaist === "string" &&
+          parsedSizes.bottomsWaist.trim()
+            ? parsedSizes.bottomsWaist
+            : baseReport.metricsAnalysis.recommendedSizes.bottomsWaist,
+        bottomsInseam:
+          typeof parsedSizes.bottomsInseam === "string" &&
+          parsedSizes.bottomsInseam.trim()
+            ? parsedSizes.bottomsInseam
+            : baseReport.metricsAnalysis.recommendedSizes.bottomsInseam,
+        outerwear:
+          typeof parsedSizes.outerwear === "string" &&
+          parsedSizes.outerwear.trim()
+            ? parsedSizes.outerwear
+            : baseReport.metricsAnalysis.recommendedSizes.outerwear,
+        dressOrSuitSize:
+          typeof parsedSizes.dressOrSuitSize === "string" &&
+          parsedSizes.dressOrSuitSize.trim()
+            ? parsedSizes.dressOrSuitSize
+            : baseReport.metricsAnalysis.recommendedSizes.dressOrSuitSize,
+      },
+      tailoringNotes,
+    },
+    colorAnalysis: {
+      ...baseReport.colorAnalysis,
+      season:
+        typeof parsed.season === "string" && parsed.season.trim()
+          ? parsed.season
+          : typeof parsedColor.season === "string" && parsedColor.season.trim()
+          ? parsedColor.season
+          : baseReport.colorAnalysis.season,
+      undertone:
+        typeof parsed.undertone === "string" && parsed.undertone.trim()
+          ? parsed.undertone
+          : typeof parsedColor.undertone === "string" &&
+            parsedColor.undertone.trim()
+          ? parsedColor.undertone
+          : baseReport.colorAnalysis.undertone,
+      contrastLevel:
+        typeof parsedColor.contrastLevel === "string" &&
+        parsedColor.contrastLevel.trim()
+          ? parsedColor.contrastLevel
+          : baseReport.colorAnalysis.contrastLevel,
+      rationale:
+        typeof parsed.rationale === "string" && parsed.rationale.trim()
+          ? parsed.rationale
+          : typeof parsedColor.rationale === "string" &&
+            parsedColor.rationale.trim()
+          ? parsedColor.rationale
+          : baseReport.colorAnalysis.rationale,
+      powerColors:
+        Array.isArray(parsedColor.powerColors) &&
+        parsedColor.powerColors.length > 0
+          ? (parsedColor.powerColors as ColorSwatch[])
+          : baseReport.colorAnalysis.powerColors,
+      neutrals:
+        Array.isArray(parsedColor.neutrals) && parsedColor.neutrals.length > 0
+          ? (parsedColor.neutrals as ColorSwatch[])
+          : baseReport.colorAnalysis.neutrals,
+      accentColors:
+        Array.isArray(parsedColor.accentColors) &&
+        parsedColor.accentColors.length > 0
+          ? (parsedColor.accentColors as ColorSwatch[])
+          : baseReport.colorAnalysis.accentColors,
+      colorsToAvoid:
+        Array.isArray(parsedColor.colorsToAvoid) &&
+        parsedColor.colorsToAvoid.length > 0
+          ? (parsedColor.colorsToAvoid as AvoidColorSwatch[])
+          : baseReport.colorAnalysis.colorsToAvoid,
+    },
+    silhouetteAndFit: {
+      ...baseReport.silhouetteAndFit,
+      keyPrinciples:
+        Array.isArray(parsedSilhouette.keyPrinciples) &&
+        parsedSilhouette.keyPrinciples.length > 0
+          ? (parsedSilhouette.keyPrinciples as Array<{
+              title: string;
+              description: string;
+            }>)
+          : baseReport.silhouetteAndFit.keyPrinciples,
+      fabricRecommendations:
+        Array.isArray(parsedSilhouette.fabricRecommendations) &&
+        parsedSilhouette.fabricRecommendations.length > 0
+          ? (parsedSilhouette.fabricRecommendations as string[])
+          : baseReport.silhouetteAndFit.fabricRecommendations,
+      necklinesAndCollars:
+        Array.isArray(parsedSilhouette.necklinesAndCollars) &&
+        parsedSilhouette.necklinesAndCollars.length > 0
+          ? (parsedSilhouette.necklinesAndCollars as string[])
+          : baseReport.silhouetteAndFit.necklinesAndCollars,
+      trouserAndHemGuide:
+        typeof parsedSilhouette.trouserAndHemGuide === "string" &&
+        parsedSilhouette.trouserAndHemGuide.trim()
+          ? parsedSilhouette.trouserAndHemGuide
+          : baseReport.silhouetteAndFit.trouserAndHemGuide,
+    },
+    curatedLookbook:
+      Array.isArray(parsed.curatedLookbook) &&
+      parsed.curatedLookbook.length > 0
+        ? (parsed.curatedLookbook as CuratedOutfit[])
+        : baseReport.curatedLookbook,
+    shoppingChecklist:
+      Array.isArray(parsed.shoppingChecklist) &&
+      parsed.shoppingChecklist.length > 0
+        ? (parsed.shoppingChecklist as ShoppingItem[])
+        : baseReport.shoppingChecklist,
+  };
+}
+
 export async function generateConsultationWithOptionalAI(
-  req: ConsultationRequest
+  req: ConsultationRequest,
+  envConfig?: AIEnvConfig
 ): Promise<ConsultationReport> {
   const baseReport = generateAtelierConsultation(req);
-  const geminiKey =
-    req.clientApiKey?.startsWith("AIza")
-      ? req.clientApiKey
-      : process.env.GEMINI_API_KEY;
-  const openAiKey =
-    req.clientApiKey?.startsWith("sk-")
-      ? req.clientApiKey
-      : process.env.OPENAI_API_KEY;
 
-  if (!geminiKey && !openAiKey) {
+  const envOpenAiKey =
+    envConfig?.openAiApiKey ||
+    (typeof process !== "undefined" ? process.env?.OPENAI_API_KEY : undefined);
+  const envGeminiKey =
+    envConfig?.geminiApiKey ||
+    (typeof process !== "undefined" ? process.env?.GEMINI_API_KEY : undefined);
+
+  const openAiKey = req.clientApiKey?.trim().startsWith("sk-")
+    ? req.clientApiKey.trim()
+    : envOpenAiKey;
+  const geminiKey = req.clientApiKey?.trim().startsWith("AIza")
+    ? req.clientApiKey.trim()
+    : envGeminiKey;
+
+  if (!openAiKey && !geminiKey) {
     return baseReport;
   }
 
-  const systemPrompt = `You are a master personal stylist and anthropometric wardrobe consultant.
-A client has submitted their photo along with height (${req.heightCm} cm), weight (${req.weightKg} kg), BMI (${baseReport.metricsAnalysis.bmi}), fit category (${req.genderFit}), aesthetic (${req.aesthetic}), occasion (${req.occasion}), budget (${req.budget}), and fit preference (${req.fitPreference}).
-Analyze the uploaded photo and metrics and return ONLY valid JSON with these overrides to enrich the report:
+  const systemPrompt = `You are ATELIER VERA, an elite personal stylist and anthropometric wardrobe consultant.
+A client has submitted their photo and body metrics:
+- Height: ${baseReport.metricsAnalysis.heightDisplay} (${req.heightCm} cm)
+- Weight: ${baseReport.metricsAnalysis.weightDisplay} (${req.weightKg} kg), BMI: ${baseReport.metricsAnalysis.bmi}
+- Tailoring Block: ${req.genderFit}
+- Signature Aesthetic: ${req.aesthetic}
+- Primary Occasion: ${req.occasion}
+- Budget Tier: ${req.budget}
+- Fit Preference: ${req.fitPreference}
+- Client Notes: ${req.customNotes || "None"}
+- Extracted Photo Pigments: ${req.photoMetrics.dominantColors.join(", ")} (Warmth: ${req.photoMetrics.warmthScore}, Contrast: ${req.photoMetrics.contrastScore}/100, Luminance: ${req.photoMetrics.brightnessScore}/100)
+
+Analyze the client's photo, complexion, proportions, and style preferences. Return ONLY valid JSON with bespoke styling recommendations matching this exact structure:
 {
-  "stylistSummary": "2-3 sentence bespoke assessment of their visual proportions, posture/vibe, and color harmony",
-  "season": "Specific 12-season color palette name",
-  "undertone": "Detected skin/hair/eye undertone description",
-  "rationale": "2 sentence explanation of why this color palette flatters the person in the photo",
-  "tailoringNotes": ["3 specific tailoring tips tailored to their height, weight, and visual silhouette"]
+  "clientTitle": "Editorial title for this client's style dossier",
+  "stylistSummary": "2-3 sentence bespoke assessment of their visual proportions, complexion harmony, and sartorial direction",
+  "metricsAnalysis": {
+    "frameProfile": "Concise architectural frame classification",
+    "verticalRuleOfThirds": "1-2 sentence rule-of-thirds proportion advice for their exact height and weight",
+    "tailoringNotes": ["3 specific alterations or tailoring instructions calibrated to their height and weight"]
+  },
+  "colorAnalysis": {
+    "season": "Specific 12-season color palette name",
+    "undertone": "Detected skin/hair/eye undertone description",
+    "contrastLevel": "Detected contrast level description",
+    "rationale": "2 sentence explanation of why this color palette flatters the client"
+  },
+  "silhouetteAndFit": {
+    "trouserAndHemGuide": "Specific trouser rise, leg opening, and hem break instructions for their height"
+  }
 }`;
 
   try {
-    if (geminiKey) {
-      const base64Data = req.imageBase64.replace(/^data:image\/\w+;base64,/, "");
-      const mimeMatch = req.imageBase64.match(/^data:(image\/\w+);base64,/);
+    if (openAiKey) {
+      const model = envConfig?.openAiModel || "gpt-4o-mini";
+      const isSupportedRasterImage =
+        /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(req.imageBase64);
+
+      const userContent: Array<Record<string, unknown>> = [
+        {
+          type: "text",
+          text: "Generate the personalized ATELIER VERA style consulting report in JSON for this client.",
+        },
+      ];
+
+      if (isSupportedRasterImage) {
+        userContent.push({
+          type: "image_url",
+          image_url: {
+            url: req.imageBase64,
+            detail: "low",
+          },
+        });
+      }
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openAiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+        }),
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as {
+          choices?: Array<{ message?: { content?: string } }>;
+        };
+        const rawText = data?.choices?.[0]?.message?.content;
+        if (rawText) {
+          const parsed = JSON.parse(rawText) as Record<string, unknown>;
+          return mergeReportWithOverrides(baseReport, parsed, "openai-vision");
+        }
+      }
+    } else if (geminiKey) {
+      const base64Data = req.imageBase64.replace(/^data:image\/[\w+]+;base64,/, "");
+      const mimeMatch = req.imageBase64.match(/^data:(image\/[\w+]+);base64,/);
       const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
 
       const response = await fetch(
@@ -651,12 +901,16 @@ Analyze the uploaded photo and metrics and return ONLY valid JSON with these ove
               {
                 parts: [
                   { text: systemPrompt },
-                  {
-                    inline_data: {
-                      mime_type: mimeType,
-                      data: base64Data,
-                    },
-                  },
+                  ...(mimeType !== "image/svg+xml"
+                    ? [
+                        {
+                          inline_data: {
+                            mime_type: mimeType,
+                            data: base64Data,
+                          },
+                        },
+                      ]
+                    : []),
                 ],
               },
             ],
@@ -668,76 +922,15 @@ Analyze the uploaded photo and metrics and return ONLY valid JSON with these ove
       );
 
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ text?: string }> };
+          }>;
+        };
         const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (rawText) {
-          const parsed = JSON.parse(rawText);
-          return {
-            ...baseReport,
-            source: "gemini-vision",
-            stylistSummary: parsed.stylistSummary || baseReport.stylistSummary,
-            colorAnalysis: {
-              ...baseReport.colorAnalysis,
-              season: parsed.season || baseReport.colorAnalysis.season,
-              undertone: parsed.undertone || baseReport.colorAnalysis.undertone,
-              rationale: parsed.rationale || baseReport.colorAnalysis.rationale,
-            },
-            metricsAnalysis: {
-              ...baseReport.metricsAnalysis,
-              tailoringNotes:
-                Array.isArray(parsed.tailoringNotes) && parsed.tailoringNotes.length > 0
-                  ? parsed.tailoringNotes
-                  : baseReport.metricsAnalysis.tailoringNotes,
-            },
-          };
-        }
-      }
-    } else if (openAiKey) {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${openAiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: "Analyze this client photo and metrics." },
-                { type: "image_url", image_url: { url: req.imageBase64 } },
-              ],
-            },
-          ],
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const rawText = data?.choices?.[0]?.message?.content;
-        if (rawText) {
-          const parsed = JSON.parse(rawText);
-          return {
-            ...baseReport,
-            source: "openai-vision",
-            stylistSummary: parsed.stylistSummary || baseReport.stylistSummary,
-            colorAnalysis: {
-              ...baseReport.colorAnalysis,
-              season: parsed.season || baseReport.colorAnalysis.season,
-              undertone: parsed.undertone || baseReport.colorAnalysis.undertone,
-              rationale: parsed.rationale || baseReport.colorAnalysis.rationale,
-            },
-            metricsAnalysis: {
-              ...baseReport.metricsAnalysis,
-              tailoringNotes:
-                Array.isArray(parsed.tailoringNotes) && parsed.tailoringNotes.length > 0
-                  ? parsed.tailoringNotes
-                  : baseReport.metricsAnalysis.tailoringNotes,
-            },
-          };
+          const parsed = JSON.parse(rawText) as Record<string, unknown>;
+          return mergeReportWithOverrides(baseReport, parsed, "gemini-vision");
         }
       }
     }
